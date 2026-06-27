@@ -3,11 +3,11 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name        "swapfile">
 <!ENTITY author      "Antonio Bezerra">
-<!ENTITY version     "2026.06.27">
+<!ENTITY version     "2026.06.27.1">
 <!ENTITY launch      "Settings/&name;">
 <!ENTITY pluginURL   "https://raw.githubusercontent.com/antoniobezerra/&name;_plugin/master/&name;.plg">
 <!ENTITY packageVER  "&version;">
-<!ENTITY packageMD5  "9df9d2d64009215703adcd27ce3cdccd">
+<!ENTITY packageMD5  "7a766be3283931e5aea9a2ec2f67b9a6">
 <!ENTITY packagefile "&name;-package-&packageVER;.tar.gz">
 <!ENTITY packageURL  "https://github.com/antoniobezerra/&name;_plugin/raw/master/&packagefile;">
 <!ENTITY pluginLOC   "/boot/config/plugins/&name;">
@@ -23,10 +23,13 @@
         support="https://github.com/antoniobezerra/swapfile_plugin/issues">
 
 <!--
-# Release Version v2026.06.27
+# Release Version v2026.06.27.1
 -->
 
 <CHANGES>
+###2026.06.27.1
+- Rebuilt release package without macOS extended metadata and published under a new package filename to avoid CDN/cache ambiguity.
+
 ###2026.06.27
 - Updated for Unraid 7+ and PHP 8.4.
 - Pointed plugin/package URLs to the antoniobezerra fork.

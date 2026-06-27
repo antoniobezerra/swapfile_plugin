@@ -7,9 +7,9 @@ This repository is an Unraid plugin fork for managing a swap file. Do not instal
 - Repository: `antoniobezerra/swapfile_plugin`
 - Branch: `master`
 - Supported Unraid version: `7.0.0+`
-- Current plugin version: `2026.06.27`
+- Current plugin version: `2026.06.27.1`
 - Main install file: `swapfile.plg`
-- Packaged payload: `swapfile-package-2026.06.27.tar.gz`
+- Packaged payload: `swapfile-package-2026.06.27.1.tar.gz`
 
 ## Important behavior
 

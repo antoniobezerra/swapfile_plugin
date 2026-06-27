@@ -54,7 +54,7 @@ write_status()
   mkdir -p "${EMHTTP_PATH}"
   {
     echo "# SwapFile status"
-    echo "SWAP_PLG_LOCAL_VER=\"2026.06.27\""
+    echo "SWAP_PLG_LOCAL_VER=\"2026.06.27.1\""
     echo "SWAP_PLG_ONLINE_VER=\"managed_by_plugin_manager\""
     echo "SWAP_PLG_ONLINE_EXIST=\"0\""
     echo "SWAP_PLG_HOSTING_SERVER_EXISTS=\"0\""
