@@ -3,11 +3,11 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name        "swapfile">
 <!ENTITY author      "Antonio Bezerra">
-<!ENTITY version     "2026.06.27.1">
+<!ENTITY version     "2026.06.27.2">
 <!ENTITY launch      "Settings/&name;">
 <!ENTITY pluginURL   "https://raw.githubusercontent.com/antoniobezerra/&name;_plugin/master/&name;.plg">
 <!ENTITY packageVER  "&version;">
-<!ENTITY packageMD5  "7a766be3283931e5aea9a2ec2f67b9a6">
+<!ENTITY packageMD5  "43337b13e30f4787761691c8e093bcbe">
 <!ENTITY packagefile "&name;-package-&packageVER;.tar.gz">
 <!ENTITY packageURL  "https://github.com/antoniobezerra/&name;_plugin/raw/master/&packagefile;">
 <!ENTITY pluginLOC   "/boot/config/plugins/&name;">
@@ -23,10 +23,13 @@
         support="https://github.com/antoniobezerra/swapfile_plugin/issues">
 
 <!--
-# Release Version v2026.06.27.1
+# Release Version v2026.06.27.2
 -->
 
 <CHANGES>
+###2026.06.27.2
+- Rebuilt package with ustar format to avoid macOS pax extended metadata warnings during extraction on Unraid.
+
 ###2026.06.27.1
 - Rebuilt release package without macOS extended metadata and published under a new package filename to avoid CDN/cache ambiguity.
 
