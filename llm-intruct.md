@@ -38,10 +38,19 @@ bash -n Resources/usr/local/emhttp/plugins/swapfile/scripts/rc.swapfile
 xmllint --noout swapfile.plg
 ```
 
-3. Rebuild the package:
+3. Rebuild the package. On macOS, stage files under `/tmp`, remove xattrs, and use `ustar` so Unraid does not print `LIBARCHIVE.xattr.com.apple.provenance` warnings during install:
 
 ```bash
-tar --owner=0 --group=0 -czf swapfile-package-YYYY.MM.DD.tar.gz -C Resources usr
+rm -rf /tmp/swapfile-package-stage
+mkdir -p /tmp/swapfile-package-stage
+cp -R Resources/usr /tmp/swapfile-package-stage/
+xattr -rc /tmp/swapfile-package-stage 2>/dev/null || true
+find /tmp/swapfile-package-stage/usr -type d -exec chmod 0755 {} +
+find /tmp/swapfile-package-stage/usr -type f -exec chmod 0644 {} +
+chmod 0755 /tmp/swapfile-package-stage/usr/local/emhttp/plugins/swapfile/scripts/rc.swapfile
+chmod 0755 /tmp/swapfile-package-stage/usr/local/emhttp/plugins/swapfile/event/started
+chmod 0755 /tmp/swapfile-package-stage/usr/local/emhttp/plugins/swapfile/event/stopping_svcs
+COPYFILE_DISABLE=1 tar --format ustar --uid 0 --gid 0 --uname root --gname root -czf swapfile-package-YYYY.MM.DD.tar.gz -C /tmp/swapfile-package-stage usr
 ```
 
 4. Update `packageMD5` in `swapfile.plg`.
