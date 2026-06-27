@@ -1,0 +1,13 @@
+<Plugin>
+  <Name>SwapFile</Name>
+  <Overview>Create, start, stop and manage a Linux swap file from the Unraid WebGUI. This maintained fork targets Unraid 7+.</Overview>
+  <PluginURL>https://raw.githubusercontent.com/antoniobezerra/swapfile_plugin/master/swapfile.plg</PluginURL>
+  <PluginAuthor>Antonio Bezerra</PluginAuthor>
+  <Support>https://github.com/antoniobezerra/swapfile_plugin/issues</Support>
+  <Project>https://github.com/antoniobezerra/swapfile_plugin</Project>
+  <ReadMe>https://raw.githubusercontent.com/antoniobezerra/swapfile_plugin/master/README.md</ReadMe>
+  <Category>Tools:System</Category>
+  <MinVer>7.0.0</MinVer>
+  <Icon>https://raw.githubusercontent.com/antoniobezerra/swapfile_plugin/master/Resources/usr/local/emhttp/plugins/swapfile/icons/swapfile.png</Icon>
+  <License>GPLv2</License>
+</Plugin>

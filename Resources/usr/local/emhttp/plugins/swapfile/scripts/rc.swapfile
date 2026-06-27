@@ -1,303 +1,279 @@
-#!/bin/sh
+#!/bin/bash
 
-#################
-# L O G I T
-#################
+set -u
+
+PLUGIN_NAME="swapfile"
+PLUGIN_PATH="/boot/config/plugins/${PLUGIN_NAME}"
+EMHTTP_PATH="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
+CFG_FILE="${PLUGIN_PATH}/${PLUGIN_NAME}.cfg"
+STATUS_FILE="${EMHTTP_PATH}/${PLUGIN_NAME}.status"
+
 logit()
 {
-  logger -trc.swapfile -plocal7.info -is "$1"
+  logger -t "rc.${PLUGIN_NAME}" -p local7.info -is "$1"
   echo "$1"
 }
 
-#################
-# W R I T E C F G
-#################
+load_cfg()
+{
+  mkdir -p "${PLUGIN_PATH}"
+
+  UPGRADE_PLG_ON_BOOT="false"
+  SWAP_ENABLE_ON_BOOT="false"
+  SWAP_DELETE="false"
+  SWAP_LOCATION="/mnt/cache"
+  SWAP_FILENAME="swapfile"
+  SWAP_NAME="UNRAID-SWAP"
+  SWAP_SIZE_MB="8192"
+
+  if [ -f "${CFG_FILE}" ]; then
+    # shellcheck disable=SC1090
+    source "${CFG_FILE}"
+  fi
+}
+
 write_cfg()
 {
-  echo "# Swap File plugin configuration" > ${SWAP_PLUGIN_PATH}/swapfile.cfg
-
-  echo "UPGRADE_PLG_ON_BOOT=\"$UPGRADE_PLG_ON_BOOT\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_ENABLE_ON_BOOT=\"$SWAP_ENABLE_ON_BOOT\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_DELETE=\"$SWAP_DELETE\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_LOCATION=\"$SWAP_LOCATION\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_FILENAME=\"$SWAP_FILENAME\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_NAME=\"$SWAP_NAME\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-  echo "SWAP_SIZE_MB=\"$SWAP_SIZE_MB\"" >> ${SWAP_PLUGIN_PATH}/swapfile.cfg
-
-  logit "Plugin configuration written"
+  mkdir -p "${PLUGIN_PATH}"
+  {
+    echo "# SwapFile plugin configuration - managed by the Unraid WebGUI"
+    echo "UPGRADE_PLG_ON_BOOT=\"false\""
+    echo "SWAP_ENABLE_ON_BOOT=\"${SWAP_ENABLE_ON_BOOT}\""
+    echo "SWAP_DELETE=\"${SWAP_DELETE}\""
+    echo "SWAP_LOCATION=\"${SWAP_LOCATION}\""
+    echo "SWAP_FILENAME=\"${SWAP_FILENAME}\""
+    echo "SWAP_NAME=\"${SWAP_NAME}\""
+    echo "SWAP_SIZE_MB=\"${SWAP_SIZE_MB}\""
+  } > "${CFG_FILE}"
+  chmod 600 "${CFG_FILE}"
+  logit "SwapFile configuration written"
 }
 
-#################
-# W R I T E S T A T U S
-#################
 write_status()
 {
-  echo "# Swap File status" > /usr/local/emhttp/plugins/swapfile/swapfile.status
-
-  echo "SWAP_PLG_HOSTING_SERVER_EXISTS=\"$SWAP_PLG_HOSTING_SERVER_EXISTS\"" >> /usr/local/emhttp/plugins/swapfile/swapfile.status
-  echo "SWAP_PLG_ONLINE_EXIST=\"$SWAP_PLG_ONLINE_EXIST\"" >> /usr/local/emhttp/plugins/swapfile/swapfile.status
-  echo "SWAP_PLG_ONLINE_VER=\"$SWAP_PLG_ONLINE_VER\"" >> /usr/local/emhttp/plugins/swapfile/swapfile.status
-  echo "SWAP_PLG_LOCAL_VER=\"$SWAP_PLG_LOCAL_VER\"" >> /usr/local/emhttp/plugins/swapfile/swapfile.status
+  mkdir -p "${EMHTTP_PATH}"
+  {
+    echo "# SwapFile status"
+    echo "SWAP_PLG_LOCAL_VER=\"2026.06.27\""
+    echo "SWAP_PLG_ONLINE_VER=\"managed_by_plugin_manager\""
+    echo "SWAP_PLG_ONLINE_EXIST=\"0\""
+    echo "SWAP_PLG_HOSTING_SERVER_EXISTS=\"0\""
+  } > "${STATUS_FILE}"
 }
 
-#################
-# S T A R T
-#################
+is_bool()
+{
+  [ "$1" = "true" ] || [ "$1" = "false" ]
+}
+
+is_safe_location()
+{
+  case "$1" in
+    /mnt/user|/mnt/user/*|/mnt/user0|/mnt/user0/*|/boot|/boot/*|/|*..*|"") return 1 ;;
+    /mnt/*) ;;
+    *) return 1 ;;
+  esac
+
+  echo "$1" | grep -Eq '^[A-Za-z0-9._/-]+$'
+}
+
+is_safe_filename()
+{
+  echo "$1" | grep -Eq '^[A-Za-z0-9._-]+$'
+}
+
+is_safe_label()
+{
+  echo "$1" | grep -Eq '^[A-Za-z0-9._-]+$'
+}
+
+is_positive_int()
+{
+  echo "$1" | grep -Eq '^[0-9]+$' && [ "$1" -gt 0 ]
+}
+
+swap_path()
+{
+  echo "${SWAP_LOCATION}/${SWAP_FILENAME}"
+}
+
+validate_config()
+{
+  if ! is_bool "${SWAP_ENABLE_ON_BOOT}" || ! is_bool "${SWAP_DELETE}"; then
+    logit "Invalid boolean configuration"
+    return 1
+  fi
+
+  if ! is_safe_location "${SWAP_LOCATION}"; then
+    logit "Invalid swap location '${SWAP_LOCATION}'. Use a persistent disk path under /mnt, not /mnt/user or /boot."
+    return 1
+  fi
+
+  if ! is_safe_filename "${SWAP_FILENAME}"; then
+    logit "Invalid swap filename '${SWAP_FILENAME}'. Use only letters, numbers, dash, underscore and dot."
+    return 1
+  fi
+
+  if ! is_safe_label "${SWAP_NAME}"; then
+    logit "Invalid swap label '${SWAP_NAME}'. Use only letters, numbers, dash, underscore and dot."
+    return 1
+  fi
+
+  if ! is_positive_int "${SWAP_SIZE_MB}"; then
+    logit "Invalid swap size '${SWAP_SIZE_MB}'. Use a positive size in MB."
+    return 1
+  fi
+}
+
+ensure_space()
+{
+  local available_mb required_mb
+  available_mb="$(df -Pm "${SWAP_LOCATION}" 2>/dev/null | awk 'NR==2 {print $4}')"
+  required_mb="${SWAP_SIZE_MB}"
+
+  if [ -z "${available_mb}" ]; then
+    logit "Unable to read free space for ${SWAP_LOCATION}"
+    return 1
+  fi
+
+  if [ "${available_mb}" -le "${required_mb}" ]; then
+    logit "Not enough free space in ${SWAP_LOCATION}: ${available_mb} MB available, ${required_mb} MB requested"
+    return 1
+  fi
+}
+
+swap_is_running()
+{
+  local path
+  path="$(swap_path)"
+  swapon --show=NAME --noheadings 2>/dev/null | grep -Fxq "${path}"
+}
+
+create_swap_file()
+{
+  local path
+  path="$(swap_path)"
+
+  mkdir -p "${SWAP_LOCATION}" || return 1
+  ensure_space || return 1
+
+  logit "Creating swap file ${path} (${SWAP_SIZE_MB} MB)"
+  rm -f "${path}"
+
+  if command -v fallocate >/dev/null 2>&1; then
+    fallocate -l "${SWAP_SIZE_MB}M" "${path}" || dd if=/dev/zero of="${path}" bs=1M count="${SWAP_SIZE_MB}" status=progress
+  else
+    dd if=/dev/zero of="${path}" bs=1M count="${SWAP_SIZE_MB}" status=progress
+  fi
+
+  chmod 600 "${path}"
+  mkswap -L "${SWAP_NAME}" "${path}" >/dev/null
+}
+
 swapfile_start()
 {
-	# Check if swap file exists
-	if [ -f ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} ]; then
-    SWAP_RUNNING=$(swapon -s | grep ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} | cut -d" " -f1)
-		# Check if swap file already started
-    if [ "$SWAP_RUNNING" == "${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}" ] ; then
-			logit "Swap file ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} already started"
-		# Swap file not started
-    else
-		  # Turn on swap file usage
-      swapon -v ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}
-			logit " Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} re-used and started"
-		fi
-	# Swap file does not exist
+  local path
+  validate_config || return 1
+  path="$(swap_path)"
+
+  if swap_is_running; then
+    logit "Swap file ${path} is already active"
+    return 0
+  fi
+
+  if [ ! -f "${path}" ]; then
+    create_swap_file || return 1
   else
-		# Check if requested swapfile location exists
-    if [ ! -d ${SWAP_LOCATION_NEW} ] ; then
-      # Create swap file location including parents if they don't exist
-      mkdir --parents ${SWAP_LOCATION_NEW}
-    fi
-    # Create swap file
-		logit "Creating swap file ${SWAP_LOCATION}/${SWAP_FILENAME} please wait ..."
-    dd if=/dev/zero of=${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} bs=1M count=${SWAP_SIZE_MB_NEW}
-		# Assign SWAP_NAME to the swap file
-    mkswap -L ${SWAP_NAME_NEW} ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}
-		# Change swap file permissions as required
-    chmod 600 ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}
-		# Turn on swap file usage
-    swapon -v ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}
-		logit "Swap file ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} created and started"
-	fi
+    chmod 600 "${path}"
+  fi
+
+  swapon -v "${path}"
+  logit "Swap file ${path} started"
 }
 
-#################
-# S T O P
-#################
 swapfile_stop()
 {
-	# Check if swap file assigned and in use
-  SWAP_RUNNING=$(swapon -s | grep ${SWAP_LOCATION}/${SWAP_FILENAME} | cut -d" " -f1)
-	if [ "$SWAP_RUNNING" == "${SWAP_LOCATION}/${SWAP_FILENAME}" ] ; then
-		# Turn off swap file usage
-    swapoff -v ${SWAP_LOCATION}/${SWAP_FILENAME}
-    logit "Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} stopped"
-	else
-		logit "Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} not running - Nothing to stop"
-	fi
-  if [ -f ${SWAP_LOCATION}/${SWAP_FILENAME} ] ; then
-    if [ "$SWAP_DELETE" == "true" ] ; then
-      rm --force ${SWAP_LOCATION}/${SWAP_FILENAME}
-      logit "Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} removed"
-    else
-      logit "Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} not removed"
-    fi
+  local path
+  path="$(swap_path)"
+
+  if swap_is_running; then
+    swapoff -v "${path}"
+    logit "Swap file ${path} stopped"
   else
-    logit "Swap file ${SWAP_LOCATION}/${SWAP_FILENAME} does not exist"
+    logit "Swap file ${path} is not active"
+  fi
+
+  if [ -f "${path}" ] && [ "${SWAP_DELETE}" = "true" ]; then
+    rm -f "${path}"
+    logit "Swap file ${path} removed"
   fi
 }
 
-#################
-# R E S T A R T
-#################
 swapfile_restart()
 {
-	swapfile_stop
-	sleep 3
-	swapfile_start
+  swapfile_stop || return 1
+  sleep 3
+  swapfile_start
 }
 
-#################
-# G E T P L G V E R S I O N S
-#################
-swapfile_getplgversions()
-{
-  # Swap file Plugin hosting server
-  SWAP_PLG_HOSTING_SERVER="https://github.com/theone11/swapfile_plugin"
-  # Swap file Plugin hosting server URL + filename
-  SWAP_PLG_URL="https://raw.github.com/theone11/swapfile_plugin/master/swapfile.plg"
-  # Get online/offline status of swap file Plugin hosting server
-  wget --quiet --spider --no-check-certificate --timeout=10 $SWAP_PLG_HOSTING_SERVER
-  SWAP_PLG_HOSTING_SERVER_EXISTS=$?
-  # Check if swap file Plugin hosting server is online
-  if [ "$SWAP_PLG_HOSTING_SERVER_EXISTS" == "0" ] ; then
-    # Check if swap file Plugin file exists online
-    wget --quiet --spider --no-check-certificate --timeout=10 $SWAP_PLG_URL
-    SWAP_PLG_ONLINE_EXIST=$?
-    if [ "$SWAP_PLG_ONLINE_EXIST" == "0" ] ; then
-      # Get latest version number from server
-      SWAP_PLG_ONLINE_VER=$(wget --no-check-certificate --quiet --timeout=10 $SWAP_PLG_URL -O - | grep -m 1 "Release Version v" | awk 'gsub(/.*Release Version v|*/,"")')
-    else
-      SWAP_PLG_ONLINE_VER="no_online_plg"
-    fi
-  else
-    # Set version to server_down - does not exist
-    SWAP_PLG_ONLINE_VER="server_down"
-  fi
-
-  # Check if local swap file Plugin file exists
-  if [ -f /boot/config/plugins/swapfile.plg ] ; then
-    # Get existing version number from local file
-    SWAP_PLG_LOCAL_VER=$(grep -m 1 "Release Version v" /boot/config/plugins/swapfile.plg | awk 'gsub(/.*Release Version v|*/,"")')
-  else
-    # Set version to no_local_plg - does not exist
-    SWAP_PLG_LOCAL_VER="no_local_plg"
-  fi
-
-  # Write status to update WEBUI
-  write_status
-}
-
-#######################
-# U P D A T E P L G
-#######################
-swapfile_updateplg()
-{
-  # Get online and local plugin versions
-  swapfile_getplgversions
-
-  # Check if Plugin hosting server is online
-  if [ "$SWAP_PLG_HOSTING_SERVER_EXISTS" == "0" ] ; then
-    # Check if latest version is available on server
-    if [ "$SWAP_PLG_ONLINE_EXIST" == "0" ] ; then
-      # Check if online and local versions are different
-      if [ "$SWAP_PLG_ONLINE_VER" != "$SWAP_PLG_LOCAL_VER" ] ; then
-        # Check if local plugin doesn't exist
-        if [ "$SWAP_PLG_LOCAL_VER" == "no_local_plg" ] ; then
-          logit "Local plugin does not exist. Installing latest plugin version from hosting server (v$SWAP_PLG_ONLINE_VER)"
-        else
-          logit "Upgrading local plugin (v$SWAP_PLG_LOCAL_VER) to hosting server plugin (v$SWAP_PLG_ONLINE_VER)"
-        fi
-        # Download new swap file Plugin version
-        wget --no-check-certificate --quiet --timeout=10 $SWAP_PLG_URL -O /boot/config/plugins/swapfile.plg
-        # Install new swap file Plugin
-        /usr/local/sbin/installplg /boot/config/plugins/swapfile.plg
-        logit "New/Updated plugin installation complete"
-      # Swap file plugin hosting server is offline
-      else
-        logit "Local plugin is the same version as on hosting server (v$SWAP_PLG_LOCAL_VER)"
-      fi
-    # Online version and local version are the same
-    else
-      logit "Plugin does not exist on plugin hosting server - Cannot download new plugin"
-    fi
-  else
-    logit "Swap file Plugin hosting servers is OFFLINE - Cannot check for new packages versions"
-  fi
-}
-
-###################
-# B O O T
-###################
 swapfile_boot()
 {
-  # Check if new plugin should be updated during array mount
-  if [ $UPGRADE_PLG_ON_BOOT == "true" ] ; then
-    logit "Checking for swap file plugin update during array mount ..."
-    swapfile_updateplg
-  # Plugin update should not be done during boot
-  else
-    logit "Swap file plugin update during array mount is disabled"
-  fi
-
-  # Check if swap file should be started during array mount
-  if [ $SWAP_ENABLE_ON_BOOT == "true" ] ; then
-    logit "Starting swap file during array mount ..."
+  write_status
+  if [ "${SWAP_ENABLE_ON_BOOT}" = "true" ]; then
+    logit "Starting swap file during array start"
     swapfile_start
   else
-    logit "Swap file start during array mount is disabled"
+    logit "Swap file start during array start is disabled"
   fi
 }
 
-###################
-# M A I N
-###################
+update_cfg()
+{
+  SWAP_ENABLE_ON_BOOT="${1:-false}"
+  SWAP_DELETE="${2:-false}"
+  SWAP_LOCATION="${3:-/mnt/cache}"
+  SWAP_FILENAME="${4:-swapfile}"
+  SWAP_NAME="${5:-UNRAID-SWAP}"
+  SWAP_SIZE_MB="${6:-8192}"
 
-[ -f /boot/config/plugins/swapfile/swapfile.cfg ] && source /boot/config/plugins/swapfile/swapfile.cfg
-[ -f /usr/local/emhttp/plugins/swapfile/swapfile.status ] && source /usr/local/emhttp/plugins/swapfile/swapfile.status
-
-# Swapfile plugin folder on boot flash drive
-SWAP_PLUGIN_PATH="/boot/config/plugins/swapfile"
-
-# Copy below parameters for swapfile_start() function - uses "NEW" parameters
-SWAP_LOCATION_NEW=$SWAP_LOCATION
-SWAP_FILENAME_NEW=$SWAP_FILENAME
-SWAP_NAME_NEW=$SWAP_NAME
-SWAP_SIZE_MB_NEW=$SWAP_SIZE_MB
-
-if [ $1 == "updatecfg" ] ; then
-  UPGRADE_PLG_ON_BOOT=$2
-  SWAP_ENABLE_ON_BOOT=$3
-  SWAP_DELETE=$4
-  SWAP_LOCATION_NEW=$5
-  SWAP_FILENAME_NEW=$6
-  SWAP_NAME_NEW=$7
-  SWAP_SIZE_MB_NEW=$8
-
-	# Check if swap file exists
-	if [ -f ${SWAP_LOCATION}/${SWAP_FILENAME} ]; then
-    # Save "SWAP_DELETE" parameter value
-    SWAP_DELETE_SAVE=$SWAP_DELETE
-    # Check if swap file location of filename changed
-    if [ "${SWAP_LOCATION}/${SWAP_FILENAME}" !=  "${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}" ] || [ "$SWAP_NAME" != "$SWAP_NAME_NEW" ] || [ "$SWAP_SIZE_MB" != "$SWAP_SIZE_MB_NEW" ] ; then
-      logit "New swap file configuration is being implemented"
-      # Enable deletion of existing swap file (if exists)
-      SWAP_DELETE="true"
-      # Restart swap file with new configuration (STOP uses "OLD" parameters and "START" uses "NEW" parameters
-      SWAP_RUNNING=$(swapon -s | grep ${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW} | cut -d" " -f1)
-      # Check if swap file already started
-      if [ "$SWAP_RUNNING" == "${SWAP_LOCATION_NEW}/${SWAP_FILENAME_NEW}" ] ; then
-        # Recreate and restart swap file
-        logit "Restarting swap file with new configuration ..."
-        swapfile_restart
-      #Swap file not running
-      else
-        # Just remove existing swap file - will be recreated on next start
-        logit "Removing previous existing swap file ..."
-        swapfile_stop
-      fi
-    fi
-    # Restore "SWAP_DELETE" parameter value
-    SWAP_DELETE=$SWAP_DELETE_SAVE
-  fi
-
-  SWAP_LOCATION=$SWAP_LOCATION_NEW
-  SWAP_FILENAME=$SWAP_FILENAME_NEW
-  SWAP_NAME=$SWAP_NAME_NEW
-  SWAP_SIZE_MB=$SWAP_SIZE_MB_NEW
-
+  validate_config || return 1
   write_cfg
-else
-  case "$1" in
-    'start')
-      swapfile_start
-    ;;
-    'stop')
-      swapfile_stop
-    ;;
-    'restart')
-      swapfile_restart
-    ;;
-    'writecfg')
-      write_cfg
-    ;;
-    'updateplg')
-      swapfile_updateplg
-    ;;
-    'getplgversions')
-      swapfile_getplgversions
-    ;;
-    'boot')
-      swapfile_boot
-    ;;
+}
 
-    *)
-      echo "usage $0 start | stop | restart | updatecfg | writecfg | updateplg | getplgversions"
-  esac
-fi
+load_cfg
+write_status
+
+case "${1:-}" in
+  start)
+    swapfile_start
+    ;;
+  stop)
+    swapfile_stop
+    ;;
+  restart)
+    swapfile_restart
+    ;;
+  boot)
+    swapfile_boot
+    ;;
+  writecfg)
+    write_cfg
+    ;;
+  getplgversions)
+    write_status
+    ;;
+  updateplg)
+    logit "Plugin updates are managed by the Unraid Plugin Manager or Community Applications"
+    ;;
+  updatecfg)
+    if [ "$#" -ge 8 ]; then
+      update_cfg "${3:-false}" "${4:-false}" "${5:-/mnt/cache}" "${6:-swapfile}" "${7:-UNRAID-SWAP}" "${8:-8192}"
+    else
+      update_cfg "${2:-false}" "${3:-false}" "${4:-/mnt/cache}" "${5:-swapfile}" "${6:-UNRAID-SWAP}" "${7:-8192}"
+    fi
+    ;;
+  *)
+    echo "usage: $0 start | stop | restart | boot | updatecfg | writecfg | getplgversions"
+    exit 1
+    ;;
+esac

@@ -1,4 +1,5 @@
 **SwapFile**
 
-If you are low on memory and would like to add a Swap File to your unRAID server this plugin makes it simpler.
-The plugin enables creation/starting/stopping/changing of a Swap File on your unRAID server.
+Create and manage a Linux swap file from the Unraid WebGUI.
+
+This maintained build targets Unraid 7+ and should be configured with a persistent disk path such as `/mnt/cache`, not a user share.

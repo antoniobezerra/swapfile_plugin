@@ -1,0 +1,7 @@
+<CommunityApplications>
+  <Profile>
+    Maintained Unraid utilities for local server operations. This repository currently publishes the SwapFile plugin for Unraid 7+.
+  </Profile>
+  <WebPage>https://github.com/antoniobezerra/swapfile_plugin</WebPage>
+  <Forum>https://github.com/antoniobezerra/swapfile_plugin/issues</Forum>
+</CommunityApplications>

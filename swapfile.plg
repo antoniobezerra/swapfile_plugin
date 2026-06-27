@@ -2,83 +2,47 @@
 
 <!DOCTYPE PLUGIN [
 <!ENTITY name        "swapfile">
-<!ENTITY author      "Dan Kessler">
-<!ENTITY version     "2015.09.21">
+<!ENTITY author      "Antonio Bezerra">
+<!ENTITY version     "2026.06.27">
 <!ENTITY launch      "Settings/&name;">
-<!ENTITY pluginURL   "https://raw.githubusercontent.com/theone11/&name;_plugin/master/&name;.plg">
+<!ENTITY pluginURL   "https://raw.githubusercontent.com/antoniobezerra/&name;_plugin/master/&name;.plg">
 <!ENTITY packageVER  "&version;">
-<!ENTITY packageMD5  "38cedf80a708dee7def1fa940525fcbe">
+<!ENTITY packageMD5  "12229531e17fca3ba8a31e7b99b25d5c">
 <!ENTITY packagefile "&name;-package-&packageVER;.tar.gz">
-<!ENTITY packageURL  "https://github.com/theone11/&name;_plugin/raw/master/&packagefile;">
+<!ENTITY packageURL  "https://github.com/antoniobezerra/&name;_plugin/raw/master/&packagefile;">
 <!ENTITY pluginLOC   "/boot/config/plugins/&name;">
 <!ENTITY emhttpLOC   "/usr/local/emhttp/plugins/&name;">
 ]>
 
-<PLUGIN  name="&name;"
-         author="&author;"
-         version="&version;"
-         launch="&launch;"
-         pluginURL="&pluginURL;"
->
+<PLUGIN name="&name;"
+        author="&author;"
+        version="&version;"
+        launch="&launch;"
+        pluginURL="&pluginURL;"
+        min="7.0.0"
+        support="https://github.com/antoniobezerra/swapfile_plugin/issues">
 
 <!--
-# Release Version v2015.09.21
+# Release Version v2026.06.27
 -->
 
 <CHANGES>
+###2026.06.27
+- Updated for Unraid 7+ and PHP 8.4.
+- Pointed plugin/package URLs to the antoniobezerra fork.
+- Removed unsafe in-plugin remote auto-update flow; updates are handled by Plugin Manager / Community Applications.
+- Hardened swapfile command validation, quoting, file permissions and free-space checks.
+- Refreshed the WebGUI page with escaped output and current status handling.
+- Raised default swap size to 8192 MB and kept /mnt/cache as the default persistent location.
+
 ###2015.09.21
-- Changed start and stop events to "started" and "stopping_svcs" instead of "disks_mounted" and "unmounting_disks" to allow all array and non-array disks to be mounted before creating/using swap file
-###2015.09.17
-- Add unRAID 6.1 compatibility and keep backward compatibility
-###2015.06.07
-- Moved plugin icon to "User Utilities" section (unRAID v6)
-###2015.06.05
-- Added launch option from plugin manager (unRAID v6)
-- Changed package version to same as plugin version
-###2015.04.22
-- Added support for unRAID v6 Plugin Manager and Architecture
-- Changed timeout to 10 seconds for all network connections (was 60 seconds)
-###0.5.3
-- Added 60 second timeout to all network accesses
-- Added comment regarding swap file location in WEBUI
-###0.5.2
-- Fixed bottom of page is sometimes not visible due to unRAID progressframe
-###0.5.1
-- Fixed division by zero in usage percentage calculation for usage bar
-###0.5
-- Added existance check before deleting swap file
-- Cleaned up temporary file.
-###0.4.4
-- Fixed: Icon file couldn't be saved because plugin folder doesn't exist on first run
-###0.4.3
-- Fixed: Icon file deleted when upgrading plugin without restarting server
-###0.4.1
-- Fixed: local plugin version not shown
-###0.4
-- Workaround for downloading non exiting icon file
-###0.3
-- Fixed startup sequence - Swap file must be activated only after array mounted
-###0.2.1
-- Changed SWAP_ENABLE_ON_BOOT default value to "false"
-###0.2
-- Initial Release
+- Changed start and stop events to "started" and "stopping_svcs" instead of "disks_mounted" and "unmounting_disks" to allow all array and non-array disks to be mounted before creating/using swap file.
 </CHANGES>
 
-<!--
-############################################
-# Plugin Install script
-############################################
--->
 <FILE Name="/tmp/&name;-install" Run="/bin/bash">
 <INLINE>
-<!--
-#################
-# L O G I T
-#################
--->
 logit()
 {
-  <!--logger -trc.&name; -plocal7.info -is "$1"-->
   echo ""
   echo "$1"
 }
@@ -86,155 +50,94 @@ logit()
 DOWNLOAD_PKG="false"
 INSTALL_PKG="false"
 
-logit "Installing plugin..."
+logit "Installing &name; plugin..."
 
-<!--
-logit "Cleaning up older versions if exist in &emhttpLOC;"
-[ -d "&emhttpLOC;" ] &amp;&amp; rm -fR "&emhttpLOC;"
--->
-
-<!--# Create plugin folder if needed -->
-if [ ! -d "&pluginLOC;" ] ; then
-  logit "Creating plugin folder &pluginLOC;"
+if [ ! -d "&pluginLOC;" ]; then
   mkdir -p "&pluginLOC;"
-else
-  logit "Plugin folder &pluginLOC; already exists"
 fi
 
-<!--# Check local package file -->
-logit "Checking existing package &pluginLOC;/&packagefile;..."
-if [ -f "&pluginLOC;/&packagefile;" ] ; then
-  VBOX_PKG_LOCAL_MD5=$(/usr/bin/md5sum &pluginLOC;/&packagefile; | cut -d' ' -f1)
-  if [ "$VBOX_PKG_LOCAL_MD5" == "&packageMD5;" ] ; then
-    logit "Latest package already exists &pluginLOC;/&packagefile;"
+if [ -f "&pluginLOC;/&packagefile;" ]; then
+  LOCAL_MD5=$(/usr/bin/md5sum "&pluginLOC;/&packagefile;" | cut -d' ' -f1)
+  if [ "$LOCAL_MD5" = "&packageMD5;" ]; then
     INSTALL_PKG="true"
   else
-    logit "Local/Online package MD5 mismatch ($VBOX_PKG_LOCAL_MD5/&packageMD5;) on &pluginLOC;/&packagefile; - deleting local package"
+    rm -f "&pluginLOC;/&packagefile;"
     DOWNLOAD_PKG="true"
   fi
 else
-  logit "Latest package does not exist &pluginLOC;/&packagefile;"
   DOWNLOAD_PKG="true"
 fi
 
-<!--# Download plugin files -->
-if [ "$DOWNLOAD_PKG" == "true" ]; then
-
-  <!--# Save existing packages until new package is downloaded OK -->
-  logit "Saving any previous packages from &pluginLOC;"
-  mkdir -p "/tmp/&name;-packages"
-  TEMP="&pluginLOC;/&name;-package-*"
-  mv -f $TEMP "/tmp/&name;-packages"
-
-  logit "Attempting to download plugin package &packageURL;..."
-  wget --quiet --spider --no-check-certificate --timeout=10 &packageURL;
-  if [ ! $? == "0" ] ; then
-    logit "Package server down &packageURL; - Plugin cannot install"
-    INSTALL_PKG="false"
-  else
-    wget --quiet --no-check-certificate --timeout=10 -O &pluginLOC;/&packagefile; &packageURL;
-    if [ ! -f "&pluginLOC;/&packagefile;" ] ; then
-      logit "Package download failed &packageURL; - Plugin cannot install"
-      INSTALL_PKG="false"
+if [ "$DOWNLOAD_PKG" = "true" ]; then
+  logit "Downloading &packageURL;"
+  if wget --quiet --timeout=20 -O "&pluginLOC;/&packagefile;" "&packageURL;"; then
+    LOCAL_MD5=$(/usr/bin/md5sum "&pluginLOC;/&packagefile;" | cut -d' ' -f1)
+    if [ "$LOCAL_MD5" = "&packageMD5;" ]; then
+      INSTALL_PKG="true"
     else
-      VBOX_PKG_LOCAL_MD5=$(/usr/bin/md5sum &pluginLOC;/&packagefile; | cut -d' ' -f1)
-      if [ "$VBOX_PKG_LOCAL_MD5" != "&packageMD5;" ] ; then
-        logit "Package MD5 mismatch ($VBOX_PKG_LOCAL_MD5/&packageMD5;) on &pluginLOC;/&packagefile; - Plugin cannot install"
-        INSTALL_PKG="false"
-      else
-        logit "Package &packagefile; downloaded to &pluginLOC; - MD5 match "$VBOX_PKG_LOCAL_MD5""
-        INSTALL_PKG="true"
-      fi
+      logit "Package MD5 mismatch: $LOCAL_MD5 != &packageMD5;"
+      rm -f "&pluginLOC;/&packagefile;"
     fi
-  fi
-fi
-
-if [ "$INSTALL_PKG" == "true" ] ; then
-  logit "Extracting plugin package..."
-  <!--# Remove current existing files -->
-  [ -f "/etc/rc.d/rc.&name;" ] &amp;&amp; rm -f "/etc/rc.d/rc.&name;"
-  [ -d "&emhttpLOC;" ] &amp;&amp; rm -fR "&emhttpLOC;"
-  <!--# Extract files -->
-  tar -xf "&pluginLOC;/&packagefile;" -C "/"
-  <!-- Make rc.&name executable -->
-  chmod 0770 "&emhttpLOC;/scripts/rc.&name;"
-  <!-- Create symlink to rc file -->
-  ln -s "&emhttpLOC;/scripts/rc.&name;" "/etc/rc.d/rc.&name;"
-  <!--# Edit PAGE file depending on unRAID OS type 32/64 bit, also add version number -->
-  <!--# Add plugin image to emhttp depending on unRAID OS type 32/64 bit -->
-  UNRAID_OS_BITS=$(getconf LONG_BIT)
-  echo "Version=\"&version;\"" &gt;&gt; "&emhttpLOC;/&name;.page"
-  if [ "$UNRAID_OS_BITS" == "64" ] ; then
-    echo "Menu=\"Utilities\"" &gt;&gt; "&emhttpLOC;/&name;.page"
-    echo "---" &gt;&gt; "&emhttpLOC;/&name;.page"
-    echo "&lt;?php include '&emhttpLOC;/php/&name;_main.php';?&gt;" &gt;&gt; "&emhttpLOC;/&name;.page"
   else
-    echo "Menu=\"OtherSettings\"" &gt;&gt; "&emhttpLOC;/&name;.page"
-    mv -f "&emhttpLOC;/images/&name;.png" "&emhttpLOC;"
-    mv -f "&emhttpLOC;/php/&name;_main.php" "&emhttpLOC;/&name;.php"
-  fi
-  <!--# Create or fix configuration file -->
-  if [ ! -f "&pluginLOC;/&name;.cfg" ] ; then
-    logit "Configuration file not found. Creating configuration file..."
-    echo "# SwapFile plugin configuration - Do not modify manually - Change via WEBUI" &gt; "&pluginLOC;/&name;.cfg"
-  fi
-  logit "Checking all configuration file parameters exist"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep UPGRADE_PLG_ON_BOOT` ] &amp;&amp; echo "UPGRADE_PLG_ON_BOOT=\"false\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_ENABLE_ON_BOOT` ] &amp;&amp; echo "SWAP_ENABLE_ON_BOOT=\"false\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_DELETE` ] &amp;&amp; echo "SWAP_DELETE=\"false\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_LOCATION` ] &amp;&amp; echo "SWAP_LOCATION=\"/mnt/cache\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_FILENAME` ] &amp;&amp; echo "SWAP_FILENAME=\"swapfile\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_NAME` ] &amp;&amp; echo "SWAP_NAME=\"UNRAID-SWAP\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-  [ ! `cat "&pluginLOC;/&name;.cfg" | grep SWAP_SIZE_MB` ] &amp;&amp; echo "SWAP_SIZE_MB=\"2048\"" &gt;&gt; "&pluginLOC;/&name;.cfg"
-
-  rm -Rf "/tmp/&name;-packages"
-  rm -f "/tmp/&name;-install"
-  logit "Plugin and Package file &packagefile; extracted and installed successfully"
-  exit 0
-else
-  <!-- Revert back to previous packages -->
-  if [ -f "&pluginLOC;/&packagefile;" ] ; then
-    <!-- Remove bad MD5 downloaded package if exists -->
+    logit "Package download failed"
     rm -f "&pluginLOC;/&packagefile;"
   fi
-  logit "Reverting back to previously saved packages..."
-  TEMP1="/tmp/&name;-packages"
-  TEMP2=$(ls $TEMP1)
-  if [ "$TEMP2" != "" ] ; then
-    TEMP="/tmp/&name;-packages/&name;-package-*"
-    mv -f $TEMP "&pluginLOC;"
-    logit "Previous packages restored"
-  else
-    logit "No previous packages to restored"
-  fi
-  rm -Rf "/tmp/&name;-packages"
-  rm -f "/tmp/&name;-install"
-  logit "Plugin install failed"
-  exit 1
 fi
+
+if [ "$INSTALL_PKG" = "true" ]; then
+  [ -f "/etc/rc.d/rc.&name;" ] &amp;&amp; rm -f "/etc/rc.d/rc.&name;"
+  [ -d "&emhttpLOC;" ] &amp;&amp; rm -rf "&emhttpLOC;"
+
+  tar -xf "&pluginLOC;/&packagefile;" -C "/"
+  chmod 0755 "&emhttpLOC;/scripts/rc.&name;"
+  chmod 0755 "&emhttpLOC;/event/started" "&emhttpLOC;/event/stopping_svcs"
+  find "&emhttpLOC;" -type d -exec chmod 0755 {} \;
+  find "&emhttpLOC;" -type f ! -path "*/scripts/rc.&name;" ! -path "*/event/*" -exec chmod 0644 {} \;
+  ln -s "&emhttpLOC;/scripts/rc.&name;" "/etc/rc.d/rc.&name;"
+
+  echo "Version=\"&version;\"" &gt;&gt; "&emhttpLOC;/&name;.page"
+  echo "Menu=\"Utilities\"" &gt;&gt; "&emhttpLOC;/&name;.page"
+  echo "---" &gt;&gt; "&emhttpLOC;/&name;.page"
+  echo "&lt;?php include '&emhttpLOC;/php/&name;_main.php';?&gt;" &gt;&gt; "&emhttpLOC;/&name;.page"
+
+  if [ ! -f "&pluginLOC;/&name;.cfg" ]; then
+    echo "# SwapFile plugin configuration - managed by the Unraid WebGUI" &gt; "&pluginLOC;/&name;.cfg"
+  fi
+
+  grep -q '^UPGRADE_PLG_ON_BOOT=' "&pluginLOC;/&name;.cfg" || echo 'UPGRADE_PLG_ON_BOOT="false"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_ENABLE_ON_BOOT=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_ENABLE_ON_BOOT="false"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_DELETE=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_DELETE="false"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_LOCATION=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_LOCATION="/mnt/cache"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_FILENAME=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_FILENAME="swapfile"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_NAME=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_NAME="UNRAID-SWAP"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  grep -q '^SWAP_SIZE_MB=' "&pluginLOC;/&name;.cfg" || echo 'SWAP_SIZE_MB="8192"' &gt;&gt; "&pluginLOC;/&name;.cfg"
+  chmod 0600 "&pluginLOC;/&name;.cfg"
+
+  rm -f "/tmp/&name;-install"
+  logit "Plugin and package &packagefile; installed successfully"
+  exit 0
+fi
+
+rm -f "/tmp/&name;-install"
+logit "Plugin install failed"
+exit 1
 </INLINE>
 </FILE>
 
-<!--
-############################################
-# plugin Remove method
-############################################
--->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 logit()
 {
-  <!--logger -trc.&name; -plocal7.info -is "$1"-->
   echo "$1"
   echo ""
 }
 
-logit "Removing plugin..."
+logit "Removing &name; plugin..."
 [ -f "/tmp/&name;-install" ] &amp;&amp; rm -f "/tmp/&name;-install"
 [ -f "/etc/rc.d/rc.&name;" ] &amp;&amp; "/etc/rc.d/rc.&name;" stop
 [ -f "/etc/rc.d/rc.&name;" ] &amp;&amp; rm -f "/etc/rc.d/rc.&name;"
-[ -d "&emhttpLOC;" ] &amp;&amp; rm -fR "&emhttpLOC;"
-logit "Plugin stopped and removed - no files removed from &pluginLOC;"
+[ -d "&emhttpLOC;" ] &amp;&amp; rm -rf "&emhttpLOC;"
+logit "Plugin stopped and removed. Configuration and swap file under &pluginLOC; were not removed."
 </INLINE>
 </FILE>
 </PLUGIN>

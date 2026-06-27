@@ -1,47 +1,70 @@
-#Swap File Plugin for unRAID v5 and v6
+# SwapFile Plugin for Unraid 7+
 
-If you are low on memory and would like to add a Swap File to your unRAID server this plugin makes it simpler.
-The plugin enables creation/starting/stopping/changing of a Swap File on your unRAID server.
+This plugin creates, starts, stops and manages a Linux swap file on an Unraid server.
 
-***If this is your first plugin upgrade from version 0.5.3 or before to a newer version (supporting unRAID v6 plugin manager) then I suggest deleting the existing swapfile.plg file at /boot/config/plugins and then install as described below for unRAID v6 - all your settings should remain intact.***
+The maintained fork targets Unraid 7+ and refreshes the original 2015 plugin for the current WebGUI/PHP runtime. It keeps the same core workflow while removing the unsafe in-plugin auto-update behavior.
 
-##To install under unRAID v6:
-1. In the unRAID Plugin Manager under "Install Plugin" tab enter https://raw.githubusercontent.com/theone11/swapfile_plugin/master/swapfile.plg
-2. Wait for installation to complete.
-3. Go to plugin WEGUI and change initial settings
+## Install
 
-##To install under unRAID v5:
-1. Initial Download of plugin at https://raw.githubusercontent.com/theone11/swapfile_plugin/master/swapfile.plg
-2. Copy plugin to /boot/config/plugins on your flash drive.
-3. Reboot unRAID server or Install from command line:
-   - installplg /boot/config/plugins/swapfile.plg
-   - /etc/rc.d/rc.swapfile boot
-4. Go to plugin WEGUI and change initial settings
+In the Unraid WebGUI:
 
-##To update the plugin:
-* For WEBUI and functionality updates - Use the unRAID Plugin Manager or the swapfile Plugin WEBUI
-* For new swapfile compiled packages - Use the swapfile Plugin WEBUI
+1. Open **Plugins**.
+2. Paste this URL into **Install Plugin**:
 
-The WEBUI is divided into 3 parts:
-----------------------------------
-1. Status Summary - Shows status of configured Swap File and plugin version.
-2. Actions - Shows all possible actions available to the user depending on the status of the user's server.
-   - Start/Stop/Restart Swap File.
-   - Update plugin.
-3. Configuration - Change settings of the plugin and Swap File.
+```text
+https://raw.githubusercontent.com/antoniobezerra/swapfile_plugin/master/swapfile.plg
+```
 
-Configuration Notes:
---------------------
-1. Boot and Startup options - Change what happens during array mount.
-2. Swapfile settings - Change Swap File location, name, etc...
-   - Default Swap File location is on the Cache Drive - Change it if you must.
+3. Open **Settings > SwapFile**.
+4. Review the location and size before starting swap.
 
-Please comment on any problems encountered and any enhancements or missing features, that you would like added.
-(Here if possible: https://github.com/theone11/swapfile_plugin/issues)
+## Recommended Settings
 
-Enjoy the plugin  :)
+Use a persistent disk path, not a user share.
 
-Note:
------
-I used cofin's initial plugin (http://lime-technology.com/forum/index.php?topic=23515.0) and Joe L's unmenu swafile plugin as reference.
+Recommended default:
 
+```text
+Location: /mnt/cache
+Filename: swapfile
+Label: UNRAID-SWAP
+Size: 8192 MB
+Start during array start: No
+Delete upon stop: No
+```
+
+The plugin intentionally rejects `/mnt/user`, `/mnt/user0`, `/boot`, `/`, empty paths and paths containing `..`.
+
+## Commands
+
+The plugin installs this helper:
+
+```bash
+/etc/rc.d/rc.swapfile start
+/etc/rc.d/rc.swapfile stop
+/etc/rc.d/rc.swapfile restart
+/etc/rc.d/rc.swapfile boot
+```
+
+Status can be checked with:
+
+```bash
+swapon --show
+free -h
+cat /proc/swaps
+```
+
+## Notes
+
+- Swap helps avoid out-of-memory kills, but it is not a replacement for enough RAM.
+- Prefer SSD-backed cache storage for swap.
+- Updates are handled by Unraid Plugin Manager or Community Applications.
+- The original plugin was created by Dan Kessler. This fork keeps attribution while updating compatibility and security posture.
+
+## Support
+
+Open issues at:
+
+```text
+https://github.com/antoniobezerra/swapfile_plugin/issues
+```
